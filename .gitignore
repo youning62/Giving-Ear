@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# 本地录音与验证输出，不进仓库
+spikes/**/out/
+*.caf
+
+# macOS / 测试缓存
+.DS_Store
+.pytest_cache/

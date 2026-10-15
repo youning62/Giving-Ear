@@ -1,0 +1,9 @@
+[project]
+name = "givingear-spikes"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "google-genai>=2.29.0",
+    "numpy>=2.5.4",
+    "pyobjc-framework-avfoundation>=12.2.2",
+]

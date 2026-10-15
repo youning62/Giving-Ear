@@ -1,0 +1,29 @@
+GivingEar
+Copyright 2026 Youning Zheng
+
+本项目以 Apache License 2.0 发布，见 LICENSE。
+
+本项目使用了以下第三方软件和模型，版权归原作者所有：
+
+- sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx)
+  Copyright Xiaomi Corporation and contributors. Apache License 2.0.
+- 3D-Speaker CAM++ 说话人模型 (https://github.com/modelscope/3D-Speaker)
+  Copyright Alibaba, Inc. and its affiliates. Apache License 2.0.
+- Silero VAD (https://github.com/snakers4/silero-vad)
+  Copyright Silero Team. MIT License.
+- websockets (https://github.com/python-websockets/websockets)
+  Copyright Aymeric Augustin and contributors. BSD 3-Clause License.
+- pypinyin (https://github.com/mozillazg/python-pinyin)
+  Copyright mozillazg. MIT License.
+- jieba (https://github.com/fxsjy/jieba)
+  Copyright Sun Junyi. MIT License.
+- google-genai (https://github.com/googleapis/python-genai)
+  Copyright Google LLC. Apache License 2.0.
+- PyObjC (https://github.com/ronaldoussoren/pyobjc)
+  Copyright Ronald Oussoren and contributors. MIT License.
+- SenseVoice 语音识别模型 (https://github.com/FunAudioLLM/SenseVoice)
+  Copyright Alibaba, Inc. and its affiliates. 模型许可见其仓库（FunASR Model License）。
+- NumPy (https://numpy.org)
+  Copyright NumPy Developers. BSD 3-Clause License.
+
+模型文件不随本项目分发，首次运行时从 sherpa-onnx 的发布页下载。
