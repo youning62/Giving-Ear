@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GivingEar</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #77756e; --line: #e4e1d8;
+  --ai: #ece9e0; --accent: #2f6f5e;
+  --c0: #2f6fdb; --c1: #d9622b; --c2: #2e9a6a; --c3: #a54bc4; --c4: #c79a12; --c5: #d23f6e;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151514; --panel: #1f1f1d; --ink: #ecebe6; --muted: #8e8c84; --line: #302f2c; --ai: #2a2927; --accent: #5fb89f;
+    --c0: #6c9cf5; --c1: #f0895a; --c2: #5cc796; --c3: #cb85e3; --c4: #e0bb4a; --c5: #ef7a9f; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.dot.on { background: var(--c2); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c2) 25%, transparent); }
+#state { color: var(--muted); font-size: 13px; }
+header .sp { flex: 1; }
+button { font: inherit; font-size: 13px; padding: 5px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+main { display: grid; grid-template-columns: 250px 1fr 300px; gap: 16px; padding: 16px 20px; height: calc(100vh - 57px); }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-height: 0; display: flex; flex-direction: column; }
+h2 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .08em; margin: 0 0 10px; text-transform: uppercase; }
+#speakers { display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.card { border: 1px solid var(--line); border-left: 4px solid var(--col); border-radius: 8px; padding: 8px 10px; transition: background .15s; }
+.card.speaking { background: color-mix(in srgb, var(--col) 14%, transparent); }
+.card .n { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.card .n i { width: 8px; height: 8px; border-radius: 50%; background: var(--col); opacity: .25; }
+.card.speaking .n i { opacity: 1; animation: pulse 1s infinite; }
+.card small { color: var(--muted); display: block; }
+.card .al { font-size: 12px; color: var(--muted); }
+@keyframes pulse { 50% { transform: scale(1.6); } }
+#chat { overflow: auto; display: flex; flex-direction: column; gap: 10px; flex: 1; padding-right: 4px; }
+.msg { max-width: 80%; }
+.msg .who { font-size: 12px; font-weight: 600; color: var(--col); margin-bottom: 2px; }
+.msg .t { background: color-mix(in srgb, var(--col) 11%, var(--panel)); border: 1px solid color-mix(in srgb, var(--col) 30%, var(--line)); padding: 7px 11px; border-radius: 4px 12px 12px 12px; }
+.msg.ai { align-self: flex-end; --col: var(--accent); }
+.msg.ai .t { background: var(--ai); border-radius: 12px 4px 12px 12px; border-color: var(--line); }
+.msg.ai .who { text-align: right; }
+.note { align-self: center; font-size: 12px; color: var(--muted); background: var(--bg); padding: 2px 10px; border-radius: 99px; }
+#timeline { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.lane { position: relative; height: 18px; margin: 3px 0 3px 70px; background: color-mix(in srgb, var(--muted) 8%, transparent); border-radius: 4px; overflow: hidden; }
+.lane > b { position: absolute; left: -70px; top: 0; width: 64px; text-align: right; font-size: 11px; font-weight: 500; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; }
+.seg { position: absolute; top: 2px; bottom: 2px; background: var(--col); border-radius: 3px; min-width: 2px; }
+.lane { overflow: visible; } .lane .clip { position: absolute; inset: 0; overflow: hidden; border-radius: 4px; }
+#log { overflow: auto; font: 12px/1.5 ui-monospace, Menlo, monospace; flex: 1; }
+#log div { padding: 2px 0; border-bottom: 1px dashed var(--line); word-break: break-all; }
+#log .k { color: var(--accent); font-weight: 600; }
+#roster { font-size: 12px; color: var(--muted); margin-bottom: 10px; white-space: pre-wrap; }
+.empty { color: var(--muted); font-size: 13px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } #chat, #log { max-height: 50vh; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>GivingEar</h1>
+  <span id="state">未连接</span>
+  <span class="sp"></span>
+  <button id="demo">演示</button>
+  <button id="clear">清空</button>
+</header>
+<main>
+  <section>
+    <h2>房间里的人</h2>
+    <div id="speakers"><div class="empty">还没有人开口</div></div>
+  </section>
+  <section>
+    <h2>对话</h2>
+    <div id="chat"></div>
+    <div id="timeline"><h2>谁在说话（最近 60 秒）</h2><div id="lanes"></div></div>
+  </section>
+  <section>
+    <h2>AI 收到的名单</h2>
+    <div id="roster">—</div>
+    <h2>事件流</h2>
+    <div id="log"></div>
+  </section>
+</main>
+<script>
+const WS_URL = new URLSearchParams(location.search).get("ws") || "ws://127.0.0.1:8765";
+const WINDOW = 60;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let speakers, segs, open, now, lastWall, nColors, ws, demoTimer;
+function reset() {
+  speakers = {}; segs = []; open = {}; now = 0; lastWall = performance.now(); nColors = 0;
+  $("chat").innerHTML = ""; $("log").innerHTML = ""; $("roster").textContent = "—"; render();
+}
+
+function spk(id, name) {
+  if (!id) return null;
+  let s = speakers[id];
+  if (!s) s = speakers[id] = { id, name: name || id, color: `var(--c${nColors++ % 6})`, n: 0, talk: 0, speaking: false, aliases: [] };
+  if (name) s.name = name;
+  return s;
+}
+
+function say(cls, who, text, color) {
+  const chat = $("chat");
+  const stick = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 40;
+  const d = document.createElement("div");
+  d.className = "msg " + cls; if (color) d.style.setProperty("--col", color);
+  d.innerHTML = `<div class="who">${esc(who)}</div><div class="t">${esc(text)}</div>`;
+  chat.append(d); if (stick) chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+function note(text) {
+  const d = document.createElement("div"); d.className = "note"; d.textContent = text;
+  $("chat").append(d); $("chat").scrollTop = $("chat").scrollHeight;
+}
+function logLine(e) {
+  const { type, wall_t, audio_t, ...rest } = e;
+  const d = document.createElement("div");
+  d.innerHTML = `<span class="k">${esc(type)}</span> ${esc(JSON.stringify(rest))}`;
+  const log = $("log"); log.prepend(d); while (log.children.length > 200) log.lastChild.remove();
+}
+
+let aiMsg = null;
+function handle(e) {
+  if (e.audio_t != null) { now = Math.max(now, e.audio_t); lastWall = performance.now(); }
+  logLine(e);
+  switch (e.type) {
+    case "status":
+      $("state").textContent = { listening: "正在听", stopped: "已停止", session_ending: "AI 会话即将到时长上限" }[e.state] || e.state; break;
+    case "profile_created": spk(e.speaker_id, e.name); break;
+    case "profile_renamed": { const s = spk(e.speaker_id, e.name); s.aliases = e.aliases || []; note(`${e.old_name} → ${e.name}`); break; }
+    case "speech_start": open[e.utterance_id] = { start: e.audio_t, id: null }; break;
+    case "speaker_guess": {
+      const o = open[e.utterance_id]; const s = spk(e.speaker_id, e.name);
+      if (o && s) { o.id = s.id; s.speaking = true; }
+      break;
+    }
+    case "speech_end": {
+      const s = spk(e.speaker_id, e.name);
+      if (s) { s.n++; s.talk += e.audio_t - e.start; segs.push({ id: s.id, a: e.start, b: e.audio_t }); }
+      for (const [k, o] of Object.entries(open)) if (+k === e.utterance_id) delete open[k];
+      for (const x of Object.values(speakers)) x.speaking = Object.values(open).some((o) => o.id === x.id);
+      break;
+    }
+    case "transcript": { const s = spk(e.speaker_id, e.name); say("", s ? s.name : e.name, e.text, s && s.color); break; }
+    case "name_hint": note(`“${e.heard}”可能是指 ${e.name}`); break;
+    case "roster": $("roster").textContent = e.text; break;
+    case "ai_text":
+      if (!aiMsg) aiMsg = say("ai", "AI", "");
+      aiMsg.querySelector(".t").textContent += e.text; $("chat").scrollTop = $("chat").scrollHeight; break;
+    case "ai_interrupted": if (aiMsg) aiMsg.querySelector(".t").textContent += "（被打断）"; aiMsg = null; break;
+    case "ai_turn_end": aiMsg = null; break;
+    case "error": note("！" + e.message); break;
+    case "closed": $("state").textContent = "已结束"; break;
+  }
+  render();
+}
+
+function render() {
+  const list = Object.values(speakers);
+  $("speakers").innerHTML = list.length ? list.map((s) =>
+    `<div class="card ${s.speaking ? "speaking" : ""}" style="--col:${s.color}">
+       <div class="n"><i></i>${esc(s.name)}</div>
+       <small>${s.n} 句 · 共 ${s.talk.toFixed(1)} 秒</small>
+       ${s.aliases.length ? `<span class="al">也可能被听成：${esc(s.aliases.join("、"))}</span>` : ""}
+     </div>`).join("") : `<div class="empty">还没有人开口</div>`;
+  drawLanes();
+}
+
+function drawLanes() {
+  const t = now + (ws && ws.readyState === 1 || demoTimer ? (performance.now() - lastWall) / 1000 : 0);
+  const lo = Math.max(0, t - WINDOW), span = Math.max(WINDOW, t - lo);
+  const pos = (x) => ((Math.max(x, lo) - lo) / span) * 100;
+  $("lanes").innerHTML = Object.values(speakers).map((s) => {
+    const mine = segs.filter((g) => g.id === s.id && g.b > lo).map((g) => [g.a, g.b]);
+    for (const o of Object.values(open)) if (o.id === s.id) mine.push([o.start, t]);
+    return `<div class="lane" style="--col:${s.color}"><b>${esc(s.name)}</b><div class="clip">` +
+      mine.map(([a, b]) => `<div class="seg" style="left:${pos(a)}%;width:${pos(b) - pos(a)}%"></div>`).join("") + `</div></div>`;
+  }).join("");
+}
+setInterval(() => { if (Object.keys(open).length || demoTimer) drawLanes(); }, 200);
+
+function connect() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => { $("dot").classList.add("on"); $("state").textContent = "已连接，等待事件"; };
+  ws.onmessage = (m) => handle(JSON.parse(m.data));
+  ws.onclose = () => { $("dot").classList.remove("on"); if (!demoTimer) $("state").textContent = "未连接（每 2 秒重试）"; setTimeout(connect, 2000); };
+  ws.onerror = () => ws.close();
+}
+
+// 演示：用一段预先写好的事件序列，没有麦克风也能看到页面的样子
+const DEMO = [
+  [0, { type: "status", state: "listening" }],
+  [1, { type: "speech_start", audio_t: 1.0, utterance_id: 1 }],
+  [2, { type: "profile_created", audio_t: 2.0, speaker_id: "s1", name: "说话人 1" }],
+  [2, { type: "speaker_guess", audio_t: 2.0, utterance_id: 1, speaker_id: "s1", name: "说话人 1", new: true }],
+  [4, { type: "speech_end", audio_t: 4.0, utterance_id: 1, speaker_id: "s1", name: "说话人 1", start: 1.0 }],
+  [4.5, { type: "transcript", audio_t: 4.0, utterance_id: 1, speaker_id: "s1", name: "说话人 1", text: "你好，我叫 Leo。" }],
+  [5, { type: "profile_renamed", speaker_id: "s1", old_name: "说话人 1", name: "Leo", aliases: ["利奥"] }],
+  [5, { type: "roster", text: "[房间里的人：Leo（名字也可能被听成：利奥）]" }],
+  [6, { type: "ai_text", text: "你好 Leo，很高兴认识你。" }],
+  [7.5, { type: "ai_turn_end" }],
+  [8, { type: "speech_start", audio_t: 8.0, utterance_id: 2 }],
+  [9, { type: "profile_created", audio_t: 9.0, speaker_id: "s2", name: "说话人 2" }],
+  [9, { type: "speaker_guess", audio_t: 9.0, utterance_id: 2, speaker_id: "s2", name: "说话人 2", new: true }],
+  [11, { type: "speech_end", audio_t: 11.0, utterance_id: 2, speaker_id: "s2", name: "说话人 2", start: 8.0 }],
+  [11.5, { type: "transcript", audio_t: 11.0, utterance_id: 2, speaker_id: "s2", name: "说话人 2", text: "我是 Jennifer，请多关照。" }],
+  [12, { type: "profile_renamed", speaker_id: "s2", old_name: "说话人 2", name: "Jennifer", aliases: ["杰夫", "珍妮弗"] }],
+  [14, { type: "speech_start", audio_t: 14.0, utterance_id: 3 }],
+  [15, { type: "speaker_guess", audio_t: 15.0, utterance_id: 3, speaker_id: "s1", name: "Leo", score: 0.71, new: false }],
+  [17, { type: "speech_end", audio_t: 17.0, utterance_id: 3, speaker_id: "s1", name: "Leo", start: 14.0 }],
+  [17.5, { type: "transcript", audio_t: 17.0, utterance_id: 3, speaker_id: "s1", name: "Leo", text: "你觉得杰夫的发型怎么样？" }],
+  [18, { type: "name_hint", audio_t: 17.0, heard: "杰夫", speaker_id: "s2", name: "Jennifer" }],
+  [20, { type: "ai_text", text: "你说的“杰夫”应该是 Jennifer，" }],
+  [21, { type: "ai_text", text: "她的发型很清爽。" }],
+  [22, { type: "ai_turn_end" }],
+];
+$("demo").onclick = () => {
+  if (demoTimer) return;
+  reset(); $("state").textContent = "演示中";
+  const t0 = performance.now(); let i = 0;
+  demoTimer = setInterval(() => {
+    const el = (performance.now() - t0) / 1000;
+    while (i < DEMO.length && DEMO[i][0] <= el) { const e = { wall_t: 0, ...DEMO[i++][1] }; if (e.audio_t == null && e.type === "status") e.audio_t = 0; handle(e); }
+    now = Math.max(now, el); lastWall = performance.now();
+    if (i >= DEMO.length) { clearInterval(demoTimer); demoTimer = null; $("state").textContent = "演示结束"; render(); }
+  }, 100);
+};
+$("clear").onclick = reset;
+
+reset(); connect();
+</script>
+</body>
+</html>

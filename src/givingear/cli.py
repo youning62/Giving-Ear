@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
+import http.server
 import sys
+import threading
+import webbrowser
+from pathlib import Path
 
 from .audio import WavFileSource
 from .backend import FakeBackend
@@ -80,6 +85,22 @@ class Renderer:
                 self._line(f"！{e['message']}")
 
 
+WEB_DIR = Path(__file__).parent / "web"
+WEB_PORT = 8766
+
+
+def _serve_web(port: int) -> http.server.ThreadingHTTPServer:
+    """在本机提供可视化网页（只监听 127.0.0.1），页面自己去连 WebSocket 事件流。"""
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args):  # 不往终端里刷请求日志
+            pass
+
+    handler = functools.partial(Handler, directory=str(WEB_DIR))
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd
+
+
 async def _render(q: asyncio.Queue, renderer: Renderer) -> None:
     while True:
         e = await q.get()
@@ -112,6 +133,18 @@ async def _run(args: argparse.Namespace) -> None:
 
     bus = EventBus()
     server = await start_server(bus, port=args.port) if args.port else None
+    web = None
+    if args.web:
+        if not args.port:
+            sys.exit("！--web 需要事件流端口，不能同时用 --port 0")
+        web = _serve_web(WEB_PORT)
+        url = f"http://127.0.0.1:{WEB_PORT}/?ws=ws://127.0.0.1:{args.port}"
+        print(f"网页：{url}")
+        webbrowser.open(url)
+        for _ in range(300):  # 等网页连上事件流再开始，免得 WAV 几秒就放完、页面什么都没看到
+            if server.connections:
+                break
+            await asyncio.sleep(0.1)
     renderer = Renderer(verbose=args.verbose or args.fake)
     printer = asyncio.create_task(_render(bus.subscribe(), renderer))  # 先订阅再启动核心，不漏掉第一条事件
     session = Session(backend, bus, sink=mac)
@@ -125,6 +158,9 @@ async def _run(args: argparse.Namespace) -> None:
         if server:
             server.close()
             await server.wait_closed()
+        if web:
+            print("会话已结束，网页仍可查看，按 Ctrl+C 退出")
+            await asyncio.Event().wait()
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -136,6 +172,7 @@ def main(argv: list[str] | None = None) -> None:
     run.add_argument("--fake", action="store_true", help="不连接 AI，用假后端（测试用）")
     run.add_argument("--aec", choices=["on", "off"], default="on", help="系统回声消除；戴耳机时可以关闭")
     run.add_argument("--verbose", "-v", action="store_true", help="显示每次说话人判断的细节")
+    run.add_argument("--web", action="store_true", help="打开本地可视化网页")
     run.add_argument("--port", type=int, default=DEFAULT_PORT, help="本地事件流端口，0 表示不开启")
     argv = sys.argv[1:] if argv is None else argv
     if not argv or argv[0] not in sub.choices:  # 不写子命令时默认是 run

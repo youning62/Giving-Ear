@@ -14,6 +14,12 @@ uv run givingear --wav 对话.wav            # 用 WAV 文件代替麦克风
 uv run givingear --wav 对话.wav --realtime # 按真实速度
 ```
 
+加上 `--web` 会在 `http://127.0.0.1:8766` 打开本地可视化网页：房间里的人、对话、谁在说话的时间线、AI 收到的名单和事件流。页面右上角的"演示"按钮不需要麦克风，可以直接预览效果。
+
+```sh
+uv run givingear --web
+```
+
 运行期间，本地 WebSocket 事件流在 `ws://127.0.0.1:8765`，每条消息是一个 JSON 事件。
 
 ## 测试
