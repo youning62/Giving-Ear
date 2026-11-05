@@ -9,7 +9,7 @@
 
 **Blocked by:** 05（最小通路）
 
-**Status:** ready-for-agent
+**Status:** superseded by .scratch/accounts（票 03）
 
 - [ ] 测试：假后端模拟注册工具调用，缓存足够时注册成功；用同一个档案库重启核心后，同一个人的语料被标为该名字
 - [ ] 测试：缓存不够时返回"需要更多语音"；补足语音后再次调用可以完成注册

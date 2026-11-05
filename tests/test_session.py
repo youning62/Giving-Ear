@@ -306,3 +306,181 @@ async def test_the_same_mishearing_is_hinted_only_once(conversation):
     texts = ["你好", "我想去爬山", "杰夫呢", "杰夫说可以", "杰夫也去", "杰夫周六见"]
     bus, _ = await run_named(conversation, texts)
     assert len([e for e in bus.history if e["type"] == "name_hint"]) == 1
+
+
+# ---- 账号声纹库 ----
+
+FAST_KDF = {"n": 2**4, "r": 8, "p": 1}
+
+
+async def harvest_voiceprints(conversation):
+    """先不登录跑一遍，取出各个说话人的声纹特征，用来假装他们已经登记过。"""
+    profiles = SessionProfiles()
+    await Session(FakeBackend(), EventBus(), profiles=profiles).run(WavFileSource(conversation.path))
+    return {p.id: p.embeddings for p in profiles.profiles}
+
+
+def make_vault(tmp_path, people: dict[str, list]):
+    from givingear.accounts import AccountStore
+
+    store = AccountStore(tmp_path, kdf_cost=FAST_KDF)
+    store.create("wang", "correct horse", model=models.SPEAKER_MODEL[0])
+    vault = store.open("wang", "correct horse")
+    for name, embs in people.items():
+        vault.add(name, embs)
+    vault.save()
+    return store, vault
+
+
+async def test_registered_people_are_recognized_by_name_from_their_first_word(conversation, tmp_path):
+    found = await harvest_voiceprints(conversation)
+    _, vault = make_vault(tmp_path, {"小王": found["s1"]})  # s1 是第一个说话的人（A）
+    bus, backend = EventBus(), FakeBackend()
+    await Session(backend, bus, vault=vault).run(WavFileSource(conversation.path))
+    assert backend.labels[0].name == "小王"
+    created = [e["name"] for e in bus.history if e["type"] == "profile_created"]
+    assert created == ["说话人 1", "说话人 2"]  # 只有 B、C 是陌生人；A 没有新建档案
+    assert sum(l.name == "小王" for l in backend.labels) == 3  # A 说了 3 句，每句都是"小王"
+
+
+async def test_unregistered_people_are_still_numbered(conversation, tmp_path):
+    found = await harvest_voiceprints(conversation)
+    _, vault = make_vault(tmp_path, {"小王": found["s1"]})
+    backend = FakeBackend()
+    await Session(backend, EventBus(), vault=vault).run(WavFileSource(conversation.path))
+    assert {l.name for l in backend.labels} == {"小王", "说话人 1", "说话人 2"}
+
+
+async def test_the_roster_includes_registered_people_from_the_start(conversation, tmp_path):
+    found = await harvest_voiceprints(conversation)
+    _, vault = make_vault(tmp_path, {"小王": found["s1"]})
+    bus, backend = EventBus(), FakeBackend()
+    await Session(backend, bus, vault=vault).run(WavFileSource(conversation.path))
+    assert backend.notes[0] == "[房间里的人：小王（已登记）]"
+    loaded = next(e for e in bus.history if e["type"] == "account_loaded")
+    assert (loaded["username"], loaded["names"]) == ("wang", ["小王"])
+
+
+async def test_a_session_never_changes_the_vault_file(conversation, tmp_path):
+    found = await harvest_voiceprints(conversation)
+    _, vault = make_vault(tmp_path, {"小王": found["s1"]})
+    f = tmp_path / "accounts" / "wang" / "voiceprints.enc"
+    before = f.read_bytes()
+    await Session(NamingBackend("s1", {"name": "小李"}), EventBus(), vault=vault).run(WavFileSource(conversation.path))
+    assert f.read_bytes() == before
+
+
+async def test_a_vault_made_with_another_model_is_not_used(conversation, tmp_path):
+    found = await harvest_voiceprints(conversation)
+    _, vault = make_vault(tmp_path, {"小王": found["s1"]})
+    vault.model = "some-other-model"
+    bus, backend = EventBus(), FakeBackend()
+    await Session(backend, bus, vault=vault).run(WavFileSource(conversation.path))
+    errors = [e["message"] for e in bus.history if e["type"] == "error"]
+    assert any("重新登记" in m for m in errors)
+    assert backend.labels[0].name == "说话人 1"
+
+
+async def test_without_an_account_everyone_is_temporary(conversation):
+    backend = FakeBackend()
+    await Session(backend, EventBus()).run(WavFileSource(conversation.path))
+    assert all(l.name.startswith("说话人") for l in backend.labels)
+    assert not [n for n in backend.notes if "已登记" in n]
+
+
+# ---- 口头登记 ----
+
+
+class RegisterBackend(FakeBackend):
+    """在某个说话人第 n 次被标出时，模拟模型调用 register_speaker（或 name_speaker）。"""
+
+    def __init__(self, speaker: str, calls: dict[int, tuple[str, dict]]):
+        super().__init__()
+        self.speaker, self.calls, self.seen = speaker, calls, 0
+
+    async def send_speaker_label(self, label):
+        await super().send_speaker_label(label)
+        if label.speaker_id == self.speaker:
+            self.seen += 1
+            if self.seen in self.calls:
+                tool, args = self.calls[self.seen]
+                self.emit(BackendEvent("tool_call", tool=tool, args=args, call_id=f"c{self.seen}"))
+
+
+def fresh_account(tmp_path):
+    return make_vault(tmp_path, {})
+
+
+async def test_registering_saves_the_voice_and_the_next_session_knows_them(conversation, tmp_path):
+    store, vault = fresh_account(tmp_path)
+    bus = EventBus()
+    backend = RegisterBackend("s1", {3: ("register_speaker", {"name": "小王"})})  # A 说第 3 句时
+    await Session(backend, bus, vault=vault, min_register_s=3.0).run(WavFileSource(conversation.path))
+    result = next(r for r in backend.tool_results if r[1] == "register_speaker")[2]
+    assert result["ok"] is True, result
+    assert [e["name"] for e in bus.history if e["type"] == "registered"] == ["小王"]
+    assert [v.name for v in store.open("wang", "correct horse").voiceprints] == ["小王"]
+    # 用同一个账号重新开始，A 一开口就是"小王"
+    again = FakeBackend()
+    await Session(again, EventBus(), vault=store.open("wang", "correct horse")).run(WavFileSource(conversation.path))
+    assert again.labels[0].name == "小王"
+
+
+async def test_registering_needs_enough_speech_then_succeeds_when_repeated(conversation, tmp_path):
+    store, vault = fresh_account(tmp_path)
+    bus = EventBus()
+    call = ("register_speaker", {"name": "小王"})
+    backend = RegisterBackend("s1", {2: call, 3: call})  # 第 2 句时语音还不够，第 3 句时够了
+    await Session(backend, bus, vault=vault, min_register_s=5.0).run(WavFileSource(conversation.path))
+    results = [r[2] for r in backend.tool_results if r[1] == "register_speaker"]
+    assert results[0]["need_more_speech"] is True and results[0]["have_s"] < 5.0
+    assert results[1]["ok"] is True
+    assert [e["type"] for e in bus.history if e["type"] in ("need_more_speech", "registered")] == ["need_more_speech", "registered"]
+    assert [v.name for v in store.open("wang", "correct horse").voiceprints] == ["小王"]
+
+
+async def test_not_enough_speech_writes_nothing(conversation, tmp_path):
+    store, vault = fresh_account(tmp_path)
+    backend = RegisterBackend("s1", {2: ("register_speaker", {"name": "小王"})})
+    await Session(backend, EventBus(), vault=vault, min_register_s=1000).run(WavFileSource(conversation.path))
+    assert store.open("wang", "correct horse").voiceprints == []
+
+
+async def test_registering_without_an_account_is_refused_and_writes_nothing(conversation, tmp_path):
+    backend = RegisterBackend("s1", {2: ("register_speaker", {"name": "小王"})})
+    await Session(backend, EventBus(), min_register_s=0).run(WavFileSource(conversation.path))
+    result = next(r for r in backend.tool_results if r[1] == "register_speaker")[2]
+    assert result["ok"] is False and "登录" in result["error"]
+    assert not list(tmp_path.rglob("*.enc"))
+
+
+async def test_introducing_yourself_does_not_register_anyone(conversation, tmp_path):
+    store, vault = fresh_account(tmp_path)
+    backend = RegisterBackend("s1", {2: ("name_speaker", {"name": "小王"})})
+    await Session(backend, EventBus(), vault=vault, min_register_s=0).run(WavFileSource(conversation.path))
+    assert store.open("wang", "correct horse").voiceprints == []
+
+
+async def test_registering_twice_replaces_instead_of_duplicating(conversation, tmp_path):
+    store, vault = fresh_account(tmp_path)
+    call = ("register_speaker", {"name": "小王"})
+    backend = RegisterBackend("s1", {2: call, 3: call})
+    await Session(backend, EventBus(), vault=vault, min_register_s=0).run(WavFileSource(conversation.path))
+    assert [v.name for v in store.open("wang", "correct horse").voiceprints] == ["小王"]
+
+
+async def test_registering_needs_a_name(conversation, tmp_path):
+    _, vault = fresh_account(tmp_path)
+    backend = RegisterBackend("s1", {2: ("register_speaker", {})})
+    await Session(backend, EventBus(), vault=vault, min_register_s=0).run(WavFileSource(conversation.path))
+    assert backend.tool_results[0][2]["ok"] is False and "名字" in backend.tool_results[0][2]["error"]
+
+
+def test_the_prompt_and_tools_depend_on_having_an_account():
+    from givingear.prompts import system_prompt
+    from givingear.tools import ACCOUNT_TOOLS, ALL_TOOLS
+
+    assert "register_speaker" not in system_prompt(False) and "需要先登录账号" in system_prompt(False)
+    assert "register_speaker" in system_prompt(True)
+    assert [t.name for t in ALL_TOOLS] == ["name_speaker"]
+    assert [t.name for t in ACCOUNT_TOOLS] == ["name_speaker", "register_speaker"]

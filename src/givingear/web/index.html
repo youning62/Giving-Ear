@@ -54,6 +54,18 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .08
 #log .k { color: var(--accent); font-weight: 600; }
 #roster { font-size: 12px; color: var(--muted); margin-bottom: 10px; white-space: pre-wrap; }
 .empty { color: var(--muted); font-size: 13px; }
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); padding: 18px 20px; width: min(420px, 92vw); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog h3 { margin: 0 0 12px; font-size: 16px; }
+dialog form { display: flex; flex-direction: column; gap: 8px; }
+dialog input { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+dialog .row { display: flex; gap: 8px; align-items: center; }
+dialog .row .grow { flex: 1; }
+.err { color: var(--c5); font-size: 13px; min-height: 1.2em; }
+.hint { color: var(--muted); font-size: 12px; }
+.vp { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.vp .nm { flex: 1; font-weight: 600; } .vp small { color: var(--muted); display: block; font-weight: 400; }
+button.danger:hover { border-color: var(--c5); color: var(--c5); }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } #chat, #log { max-height: 50vh; } }
 </style>
 </head>
@@ -63,6 +75,7 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .08
   <h1>GivingEar</h1>
   <span id="state">未连接</span>
   <span class="sp"></span>
+  <button id="acct">账号</button>
   <button id="demo">演示</button>
   <button id="clear">清空</button>
 </header>
@@ -83,6 +96,25 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .08
     <div id="log"></div>
   </section>
 </main>
+<dialog id="dlg">
+  <div id="loggedout">
+    <h3>账号</h3>
+    <form id="authform" autocomplete="on">
+      <input id="u" placeholder="用户名（字母、数字、下划线、连字符）" autocomplete="username" required>
+      <input id="p" type="password" placeholder="密码（至少 8 位）" autocomplete="current-password" required>
+      <div class="err" id="autherr"></div>
+      <div class="row"><button type="submit" id="dologin">登录</button><button type="button" id="doreg">注册新账号</button><span class="grow"></span><button type="button" class="close">关闭</button></div>
+      <div class="hint">声纹加密保存在这台电脑上，只有用密码才能解开。忘记密码无法找回里面的声纹。</div>
+    </form>
+  </div>
+  <div id="loggedin" hidden>
+    <h3>账号 <span id="who"></span></h3>
+    <div id="vps"></div>
+    <div class="err" id="vperr"></div>
+    <div class="row" style="margin-top:10px"><button id="logout">退出登录</button><span class="grow"></span><button class="close">关闭</button></div>
+    <div class="hint" style="margin-top:8px">登记新的声纹：用 <code>givingear --account 账号名</code> 启动，然后对 AI 说"帮我注册"。</div>
+  </div>
+</dialog>
 <script>
 const WS_URL = new URLSearchParams(location.search).get("ws") || "ws://127.0.0.1:8765";
 const WINDOW = 60;
@@ -231,7 +263,50 @@ $("demo").onclick = () => {
 };
 $("clear").onclick = reset;
 
-reset(); connect();
+// ---- 账号 ----
+let token = null;
+try { token = sessionStorage.getItem("ge_token"); } catch {}
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || "出错了"); e.status = r.status; throw e; }
+  return j;
+}
+function setToken(t) { token = t; try { t ? sessionStorage.setItem("ge_token", t) : sessionStorage.removeItem("ge_token"); } catch {} }
+async function refreshAccount() {
+  $("autherr").textContent = $("vperr").textContent = "";
+  if (token) {
+    try {
+      const j = await api("GET", "/api/speakers");
+      $("who").textContent = j.username; $("acct").textContent = "账号：" + j.username;
+      $("vps").innerHTML = j.speakers.length ? j.speakers.map((s) =>
+        `<div class="vp"><div class="nm">${esc(s.name)}<small>登记于 ${new Date(s.registered_at * 1000).toLocaleString()}</small></div>
+         <button data-rename="${esc(s.name)}">改名</button><button class="danger" data-del="${esc(s.name)}">删除</button></div>`).join("")
+        : `<div class="empty">还没有登记任何人</div>`;
+      $("loggedout").hidden = true; $("loggedin").hidden = false; return;
+    } catch (e) { if (e.status !== 401) { $("vperr").textContent = e.message; return; } setToken(null); }
+  }
+  $("acct").textContent = "账号"; $("loggedout").hidden = false; $("loggedin").hidden = true;
+}
+async function auth(path) {
+  try { const j = await api("POST", path, { username: $("u").value, password: $("p").value }); $("p").value = ""; setToken(j.token); await refreshAccount(); }
+  catch (e) { $("autherr").textContent = e.message; }
+}
+$("acct").onclick = () => { refreshAccount(); $("dlg").showModal(); };
+document.querySelectorAll(".close").forEach((b) => (b.onclick = () => $("dlg").close()));
+$("authform").onsubmit = (ev) => { ev.preventDefault(); auth("/api/login"); };
+$("doreg").onclick = () => { if ($("authform").reportValidity()) auth("/api/register"); };
+$("logout").onclick = async () => { try { await api("POST", "/api/logout", {}); } catch {} setToken(null); refreshAccount(); };
+$("vps").onclick = async (ev) => {
+  const del = ev.target.dataset.del, ren = ev.target.dataset.rename;
+  try {
+    if (del && confirm(`确定让程序彻底忘记“${del}”的声纹吗？`)) await api("DELETE", "/api/speakers/" + encodeURIComponent(del));
+    else if (ren) { const n = prompt("新名字", ren); if (n && n !== ren) await api("POST", "/api/speakers/rename", { old: ren, new: n }); }
+    await refreshAccount();
+  } catch (e) { $("vperr").textContent = e.message; }
+};
+
+reset(); connect(); refreshAccount();
 </script>
 </body>
 </html>

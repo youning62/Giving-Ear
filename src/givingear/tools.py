@@ -38,4 +38,23 @@ NAME_SPEAKER = ToolSpec(
     },
 )
 
-ALL_TOOLS = [NAME_SPEAKER]
+REGISTER_SPEAKER = ToolSpec(
+    name="register_speaker",
+    description=(
+        "把某个人的声纹永久保存到当前登录的账号里，以后每次打开都能认出他。"
+        "只有当这个人明确表示要登记时才调用，例如“帮我注册”“记住我的声音”“以后都认得我”。"
+        "只是自我介绍、聊天里提到名字，都不算登记意图，不要调用。"
+        "如果返回需要更多语音，请对方再随便说几句，说够了再调用一次。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "这个人的名字；这个人已经有名字时可以省略"},
+            "speaker": {"type": "string", "description": "要登记的人当前在标签中的名字，例如“说话人 2”。省略时表示刚才说话的人"},
+            "aliases": {"type": "array", "items": {"type": "string"}, "description": "名字的其他写法、音译、容易被听成的样子"},
+        },
+    },
+)
+
+ALL_TOOLS = [NAME_SPEAKER]  # 没有登录账号时只有命名工具
+ACCOUNT_TOOLS = [NAME_SPEAKER, REGISTER_SPEAKER]  # 登录账号后，才能登记声纹

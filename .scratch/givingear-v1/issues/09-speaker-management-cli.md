@@ -4,7 +4,7 @@
 
 **Blocked by:** 08（口头注册与永久保存档案）
 
-**Status:** ready-for-agent
+**Status:** superseded by .scratch/accounts（票 04）
 
 - [ ] `givingear speakers list` 显示所有已注册档案；没有档案时提示"暂无已注册的说话人"
 - [ ] `givingear speakers delete <名字>` 删除档案，并确认删除成功

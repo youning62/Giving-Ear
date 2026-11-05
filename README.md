@@ -20,6 +20,20 @@ uv run givingear --wav 对话.wav --realtime # 按真实速度
 uv run givingear --web
 ```
 
+## 账号与声纹库
+
+声纹登记在账号里，加密保存在这台电脑的 `~/.givingear/`（可用 `GIVINGEAR_HOME` 改位置）。忘记密码就无法找回里面的声纹。
+
+```sh
+uv run givingear account create wang           # 创建账号（会提示设置密码）
+uv run givingear --account wang --web           # 用账号登录并开始听；对 AI 说"帮我注册"就能登记声纹
+uv run givingear speakers list                  # 查看已登记的人
+uv run givingear speakers delete 小王           # 让程序彻底忘记一个人
+uv run givingear account passwd wang            # 改密码
+```
+
+网页右上角的"账号"可以登录、查看和删除已登记的声纹。
+
 运行期间，本地 WebSocket 事件流在 `ws://127.0.0.1:8765`，每条消息是一个 JSON 事件。
 
 ## 测试

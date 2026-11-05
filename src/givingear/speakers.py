@@ -36,11 +36,13 @@ class Profile:
     embeddings: list[np.ndarray] = field(default_factory=list)
     aliases: list[str] = field(default_factory=list)  # 名字的其他写法、音译、容易被听成的样子
     named: bool = False  # 是否已经知道真名（否则名字是"说话人 N"）
+    registered: bool = False  # 来自账号声纹库（已登记），而不是本次会话临时建的
+    speech_s: float = 0.0  # 本次会话里累计说了多少秒话（登记声纹要求足够多）
 
     @property
     def label(self) -> str:
-        """固定的编号名，改名后也不变，例如"说话人 2"。"""
-        return f"说话人 {self.id[1:]}"
+        """固定的编号名，改名后也不变，例如"说话人 2"；已登记的人是"已登记 1"。"""
+        return f"{'已登记' if self.id.startswith('u') else '说话人'} {self.id[1:]}"
 
     @property
     def centroid(self) -> np.ndarray:
@@ -85,6 +87,14 @@ class SessionProfiles:
         self._next += 1
         self.profiles.append(profile)
         return Match(profile, 1.0, is_new=True)
+
+    def load_registered(self, voiceprints) -> None:
+        """把账号声纹库里已登记的人放进来；他们第一次开口就能以名字被认出。内存里的副本，不会改动声纹库。"""
+        for i, v in enumerate(voiceprints, 1):
+            self.profiles.append(
+                Profile(id=f"u{i}", name=v.name, embeddings=[e.copy() for e in v.embeddings],
+                        aliases=list(v.aliases), named=True, registered=True)
+            )
 
     def find(self, ref: str) -> Profile | None:
         """按名字或编号找档案，忽略空格和大小写（"说话人2" 和 "说话人 2" 都能找到）。"""

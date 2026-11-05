@@ -8,7 +8,9 @@ from typing import Protocol
 
 import numpy as np
 
+from . import models
 from .audio import SAMPLE_RATE, AudioSource
+from .accounts import Vault
 from .backend import BackendEvent, SpeakerLabel, VoiceBackend
 from .events import EventBus, event
 from .names import Person, find_misheard_names
@@ -19,6 +21,7 @@ from .vad import SpeechEnd, SpeechStart, Vad
 GUESS_AFTER_S = 1.0  # 开口多久后给出初判
 HINT_COOLDOWN_S = 60.0  # 同一个误听在这段时间内只提示一次
 MIN_GUESS_S = 0.5  # 太短的音频算不出可靠的声纹
+MIN_REGISTER_S = 8.0  # 一个人本次会话里累计说够这么久，才允许登记声纹
 
 
 class AudioSink(Protocol):
@@ -46,6 +49,8 @@ class Session:
         guess_after: float = GUESS_AFTER_S,
         sink: AudioSink | None = None,
         transcriber: Transcriber | None = None,
+        vault: Vault | None = None,
+        min_register_s: float = MIN_REGISTER_S,
     ):
         self.backend = backend
         self.sink = sink
@@ -62,10 +67,27 @@ class Session:
         self._recent: Match | None = None  # 最近一句话的说话人，工具调用里"刚才说话的人"指的就是他
         self._roster_sent = ""
         self._hinted: dict[tuple[str, str], float] = {}  # (听到的词, 说话人编号) → 上次提示的音频时间
+        self.vault = vault
+        self.min_register_s = min_register_s
+        self._vault_error = ""
+        if vault is not None:
+            if vault.model and vault.model != models.SPEAKER_MODEL[0]:
+                # 声纹特征和模型绑定：模型换了，旧特征不能用，不能悄悄识别错
+                self._vault_error = f"声纹库是用另一个声纹模型（{vault.model}）登记的，现在的模型是 {models.SPEAKER_MODEL[0]}，已登记的人需要重新登记"
+            else:
+                self.profiles.load_registered(vault.voiceprints)
 
     async def run(self, source: AudioSource) -> None:
         await self.backend.connect()
         self.bus.publish(event("status", state="listening"))
+        if self.vault is not None:
+            if self._vault_error:
+                self.bus.publish(event("error", message=self._vault_error))
+            else:
+                self.bus.publish(
+                    event("account_loaded", username=self.vault.username, names=[v.name for v in self.vault.voiceprints])
+                )
+        await self._send_roster_if_changed()
         replies = asyncio.create_task(self._consume_backend())
         try:
             now = 0.0
@@ -126,17 +148,55 @@ class Session:
         match tool:
             case "name_speaker":
                 return self._name_speaker(args)
+            case "register_speaker":
+                return self._register_speaker(args)
         return {"ok": False, "error": f"没有这个工具：{tool}"}
+
+    def _resolve_speaker(self, args: dict, ask: str):
+        """工具参数里的"谁"：按名字或编号找，省略时是刚才说话的人。返回 (档案, 错误)。"""
+        ref = str(args.get("speaker") or "").strip()
+        profile = self.profiles.find(ref) if ref else (self._recent.profile if self._recent else None)
+        if profile is None:
+            who = f"找不到“{ref}”" if ref else "还没有人说过话"
+            return None, {"ok": False, "error": f"{who}，不知道{ask}"}
+        return profile, None
+
+    def _register_speaker(self, args: dict) -> dict:
+        if self.vault is None:
+            return {"ok": False, "error": "当前没有登录账号，无法保存声纹"}
+        profile, err = self._resolve_speaker(args, "要登记谁")
+        if err:
+            return err
+        name = str(args.get("name") or "").strip() or (profile.name if profile.named else "")
+        if not name:
+            return {"ok": False, "error": "还不知道这个人的名字，请先问清楚他叫什么"}
+        if not profile.registered and profile.speech_s < self.min_register_s:
+            self.bus.publish(
+                event("need_more_speech", speaker_id=profile.id, name=profile.name,
+                      have_s=round(profile.speech_s, 1), need_s=self.min_register_s)
+            )
+            return {"ok": False, "need_more_speech": True, "have_s": round(profile.speech_s, 1),
+                    "need_s": self.min_register_s, "note": "请这个人再随便说几句话，说够了再调用一次"}
+        aliases = [str(a).strip() for a in args.get("aliases") or []] or profile.aliases
+        try:
+            self.vault.reload()  # 网页里可能刚改过声纹库，先读最新的再写，免得覆盖
+            self.vault.add(name, profile.embeddings, [a for a in dict.fromkeys(aliases) if a and a != name])
+            self.vault.save()
+        except Exception as exc:
+            return {"ok": False, "error": f"保存失败：{exc}"}
+        old = profile.name
+        profile.name, profile.named, profile.registered = name, True, True
+        profile.aliases = [a for a in dict.fromkeys(aliases) if a and a != name]
+        self.bus.publish(event("registered", speaker_id=profile.id, old_name=old, name=name, account=self.vault.username))
+        return {"ok": True, "name": name, "note": f"已永久保存到账号 {self.vault.username}"}
 
     def _name_speaker(self, args: dict) -> dict:
         name = str(args.get("name", "")).strip()
         if not name:
             return {"ok": False, "error": "缺少名字"}
-        ref = str(args.get("speaker") or "").strip()
-        profile = self.profiles.find(ref) if ref else (self._recent.profile if self._recent else None)
-        if profile is None:
-            who = f"找不到“{ref}”" if ref else "还没有人说过话"
-            return {"ok": False, "error": f"{who}，不知道要给谁命名"}
+        profile, err = self._resolve_speaker(args, "要给谁命名")
+        if err:
+            return err
         old = profile.name
         profile.name, profile.named = name, True
         aliases = [str(a).strip() for a in args.get("aliases") or []]
@@ -199,6 +259,7 @@ class Session:
         # 整句话和初判的档案足够像，才用来充实档案，避免把别人的声音混进来
         if score >= self.profiles.threshold:
             self.profiles.add(p, emb)
+            p.speech_s += len(e.samples) / SAMPLE_RATE
         speaker_id, name = p.id, p.name
         task = asyncio.create_task(self._transcribe(utt.id, speaker_id, name, e))
         self._transcribing.add(task)
@@ -223,7 +284,7 @@ class Session:
                 parts.append(f"{p.name}（还不知道名字）")
                 continue
             heard = f"，名字也可能被听成：{'、'.join(p.aliases)}" if p.aliases else ""
-            parts.append(f"{p.name}（{p.label}{heard}）")
+            parts.append(f"{p.name}（{'已登记' if p.registered else p.label}{heard}）")
         return "[房间里的人：" + "；".join(parts) + "]"
 
     async def _send_roster_if_changed(self) -> None:

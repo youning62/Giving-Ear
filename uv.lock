@@ -339,6 +339,7 @@ name = "givingear"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "google-genai" },
     { name = "jieba" },
     { name = "numpy" },
@@ -357,6 +358,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=46" },
     { name = "google-genai", specifier = ">=2.29.0" },
     { name = "jieba", specifier = ">=0.42.1" },
     { name = "numpy", specifier = ">=2.5.4" },
