@@ -71,6 +71,12 @@ class GeminiBackend:
     async def send_speaker_label(self, label: SpeakerLabel) -> None:
         await self.send_note(label.text)
 
+    async def send_transcript(self, speaker_id: str, name: str, text: str, t: float) -> None:
+        pass  # Gemini 直接听音频
+
+    async def interrupt(self) -> None:
+        pass  # Gemini 服务端自己判断被打断，并通过 interrupted 事件告诉我们
+
     async def send_note(self, text: str) -> None:
         await self._session.send_client_content(
             turns=types.Content(role="user", parts=[types.Part(text=text)]), turn_complete=False

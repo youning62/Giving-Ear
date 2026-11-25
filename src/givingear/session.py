@@ -190,6 +190,12 @@ class Session:
         self.bus.publish(event("registered", speaker_id=profile.id, old_name=old, name=name, account=self.vault.username))
         return {"ok": True, "name": name, "note": f"已永久保存到账号 {self.vault.username}"}
 
+    async def register_from_ui(self, speaker_id: str, name: str = "") -> dict:
+        """网页上点"登记声纹"：和 AI 调用工具走同一条路，规则也一样。"""
+        result = self._register_speaker({"speaker": speaker_id, "name": name})
+        await self._send_roster_if_changed()
+        return result
+
     def _name_speaker(self, args: dict) -> dict:
         name = str(args.get("name", "")).strip()
         if not name:
@@ -216,6 +222,7 @@ class Session:
     async def _on_samples(self, samples: np.ndarray, now: float) -> None:
         for e in self._vad.accept(samples):
             if isinstance(e, SpeechStart):
+                await self.backend.interrupt()  # 有人开口：文字模型后端要取消还没说的回复（Gemini 自己会处理）
                 self._utt = _Utterance(self._next_utt, e.t)
                 self._next_utt += 1
                 self.bus.publish(event("speech_start", e.t, utterance_id=self._utt.id))
@@ -331,3 +338,5 @@ class Session:
                     start=round(e.t_start, 3),
                 )
             )
+            current = self.profiles.find(speaker_id)  # 说完之后可能刚被命名，给文字模型用最新的名字
+            await self.backend.send_transcript(speaker_id, current.name if current else name, text, e.t_end)

@@ -27,3 +27,4 @@ Copyright 2026 Youning Zheng
   Copyright NumPy Developers. BSD 3-Clause License.
 
 模型文件不随本项目分发，首次运行时从 sherpa-onnx 的发布页下载。
+- Qwen TTS 与 CosyVoice 的调用方式参考了 QianWen-AI/qianwen-ai 的 qianwen-audio-tts（Apache License 2.0）和 FunAudioLLM/CosyVoice 的 FastAPI 示例（Apache License 2.0）。我们只通过网络接口调用它们，不包含它们的代码或模型。

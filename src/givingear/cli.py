@@ -167,11 +167,27 @@ def main(argv: list[str] | None = None) -> None:
     run.add_argument("--account", help="用这个账号登录，已登记的人会被直接认出来，也可以登记新的声纹")
     run.add_argument("--web", action="store_true", help="打开本地可视化网页")
     run.add_argument("--port", type=int, default=DEFAULT_PORT, help="本地事件流端口，0 表示不开启")
+    web = sub.add_parser("web", help="启动网页服务，所有操作都在浏览器里完成（不带参数时的默认行为）")
+    web.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+    web.add_argument("--web-port", type=int, default=WEB_PORT)
+    web.add_argument("--port", type=int, default=DEFAULT_PORT, help="事件流端口")
     account_cli.add_parsers(sub)
     argv = sys.argv[1:] if argv is None else argv
-    if not argv or argv[0] not in sub.choices:  # 不写子命令时默认是 run
+    if not argv:  # 什么都不写：启动网页服务
+        argv = ["web"]
+    elif argv[0] not in sub.choices and argv[0] not in ("-h", "--help"):  # 只写了选项：当作 run
         argv = ["run", *argv]
     args = parser.parse_args(argv)
+    if args.cmd == "web":
+        from .app import run_app
+
+        try:
+            asyncio.run(run_app(args.web_port, args.port, open_browser=not args.no_browser))
+        except ConfigError as exc:
+            sys.exit(f"！{exc}")
+        except KeyboardInterrupt:
+            pass
+        return
     if args.cmd in ("account", "speakers"):
         account_cli.run(args)
         return

@@ -16,6 +16,9 @@ def event(type_: str, audio_t: float | None = None, **fields: Any) -> dict[str, 
     return e
 
 
+MAX_HISTORY = 5000
+
+
 class EventBus:
     """一对多广播。每个订阅者有自己的队列，慢的订阅者不会拖住核心。"""
 
@@ -24,8 +27,13 @@ class EventBus:
         self._max_queue = max_queue
         self.history: list[dict[str, Any]] = []
 
+    def reset(self) -> None:
+        """新会话开始：清掉上一个会话的历史，订阅者不受影响。"""
+        self.history.clear()
+
     def publish(self, e: dict[str, Any]) -> None:
         self.history.append(e)
+        del self.history[: -MAX_HISTORY]
         for q in list(self._subs):
             if q.full():
                 q.get_nowait()  # 丢掉最旧的，保证新事件能进来

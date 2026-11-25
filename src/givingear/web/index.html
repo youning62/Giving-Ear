@@ -24,7 +24,15 @@ header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
 header .sp { flex: 1; }
 button { font: inherit; font-size: 13px; padding: 5px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
-main { display: grid; grid-template-columns: 250px 1fr 300px; gap: 16px; padding: 16px 20px; height: calc(100vh - 57px); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary.stop { background: var(--c5); border-color: var(--c5); }
+button:disabled { opacity: .5; cursor: default; }
+#banner { margin: 12px 20px 0; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; display: flex; gap: 10px; align-items: center; }
+#banner.err { border-color: var(--c5); } #banner.ok { border-color: var(--c2); } #banner.todo { border-color: var(--accent); }
+#banner .sp { flex: 1; } #banner[hidden] { display: none; }
+.card .reg { font-size: 11px; color: var(--c2); font-weight: 600; margin-left: auto; }
+.card button { margin-top: 6px; font-size: 12px; padding: 3px 9px; }
+main { display: grid; grid-template-columns: 250px 1fr 300px; gap: 16px; padding: 16px 20px; height: calc(100vh - 57px - var(--bh, 0px)); }
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-height: 0; display: flex; flex-direction: column; }
 h2 { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .08em; margin: 0 0 10px; text-transform: uppercase; }
 #speakers { display: flex; flex-direction: column; gap: 8px; overflow: auto; }
@@ -59,8 +67,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 dialog h3 { margin: 0 0 12px; font-size: 16px; }
 dialog form { display: flex; flex-direction: column; gap: 8px; }
 dialog input { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+dialog select { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+dialog #customfields, dialog #voicefields, dialog #qwenfields, dialog #cosyfields, dialog #macfields { display: flex; flex-direction: column; gap: 8px; }
+dialog #customfields[hidden], dialog #voicefields[hidden], dialog #qwenfields[hidden], dialog #cosyfields[hidden], dialog #macfields[hidden] { display: none; }
 dialog .row { display: flex; gap: 8px; align-items: center; }
 dialog .row .grow { flex: 1; }
+.err.ok { color: var(--c2); }
 .err { color: var(--c5); font-size: 13px; min-height: 1.2em; }
 .hint { color: var(--muted); font-size: 12px; }
 .vp { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
@@ -75,10 +87,13 @@ button.danger:hover { border-color: var(--c5); color: var(--c5); }
   <h1>GivingEar</h1>
   <span id="state">未连接</span>
   <span class="sp"></span>
+  <button id="startstop" class="primary">开始监听</button>
+  <button id="settings">设置</button>
   <button id="acct">账号</button>
   <button id="demo">演示</button>
   <button id="clear">清空</button>
 </header>
+<div id="banner" hidden></div>
 <main>
   <section>
     <h2>房间里的人</h2>
@@ -96,6 +111,43 @@ button.danger:hover { border-color: var(--c5); color: var(--c5); }
     <div id="log"></div>
   </section>
 </main>
+<dialog id="setdlg">
+  <h3>设置</h3>
+  <form id="keyform" onsubmit="return false">
+    <label class="hint" for="prov">用哪个模型</label>
+    <select id="prov"></select>
+    <div class="hint" id="provnote"></div>
+    <div id="customfields" hidden>
+      <input id="curl" placeholder="接口地址，例如 https://api.example.com/v1" autocomplete="off">
+      <input id="cmodel" placeholder="模型名，例如 qwen-plus" autocomplete="off">
+    </div>
+    <div class="hint" id="keystatus"></div>
+    <input id="keyin" type="password" placeholder="粘贴这个模型的 API 密钥（不改就留空）" autocomplete="off">
+    <div class="hint" id="keyhelp"></div>
+    <div id="voicefields" hidden>
+      <label class="hint" for="ttsengine">AI 的声音</label>
+      <select id="ttsengine"></select>
+      <div id="macfields"><input id="zhvoice" placeholder="macOS 自带的中文声音名，例如 Tingting" autocomplete="off"></div>
+      <div id="qwenfields" hidden>
+        <input id="qvoice" placeholder="音色，例如 Cherry" autocomplete="off">
+        <div class="hint" id="dskeystatus"></div>
+        <input id="dskey" type="password" placeholder="DashScope（通义千问）API 密钥（不改就留空）" autocomplete="off">
+        <div class="hint">在 <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener">阿里云百炼</a> 申请。</div>
+      </div>
+      <div id="cosyfields" hidden>
+        <input id="cosyurl" placeholder="CosyVoice 服务地址，例如 http://127.0.0.1:50000" autocomplete="off">
+        <select id="cosymode"><option value="instruct2">instruct2：用一段参考录音克隆音色（CosyVoice 2/3）</option><option value="instruct">instruct：预置音色（CosyVoice-300M-Instruct）</option></select>
+        <input id="cosyspk" placeholder="参考录音（WAV）的路径，或预置音色名" autocomplete="off">
+        <input id="cosyrate" placeholder="采样率，默认 24000" autocomplete="off">
+        <div class="hint">需要自己部署 CosyVoice 的服务，说明见 README。</div>
+      </div>
+      <div class="row" id="auditionrow"><select id="emotion"></select><button type="button" id="audition">试听</button><span class="hint" id="auditionmsg"></span></div>
+    </div>
+    <div class="err" id="keyerr"></div>
+    <div class="row"><button type="button" id="savekey" class="primary">保存</button><button type="button" id="testconn">测试连接</button><button type="button" id="delkey" class="danger">删除密钥</button><span class="grow"></span><button type="button" class="close">关闭</button></div>
+    <label class="hint"><input type="checkbox" id="aec" checked> 开启回声消除（戴耳机时可以关闭）</label>
+  </form>
+</dialog>
 <dialog id="dlg">
   <div id="loggedout">
     <h3>账号</h3>
@@ -116,7 +168,9 @@ button.danger:hover { border-color: var(--c5); color: var(--c5); }
   </div>
 </dialog>
 <script>
-const WS_URL = new URLSearchParams(location.search).get("ws") || "ws://127.0.0.1:8765";
+const EXPECTED_API = 4; // 要和后台的 webapi.API_VERSION 一致
+let wsPort = 8765;
+const wsUrl = () => new URLSearchParams(location.search).get("ws") || `ws://127.0.0.1:${wsPort}`;
 const WINDOW = 60;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -162,6 +216,10 @@ function handle(e) {
   switch (e.type) {
     case "status":
       $("state").textContent = { listening: "正在听", stopped: "已停止", session_ending: "AI 会话即将到时长上限" }[e.state] || e.state; break;
+    case "session_started": reset(); logLine(e); refreshState(); break;
+    case "account_loaded": if (e.names.length) note("已登录账号 " + e.username + "，已登记：" + e.names.join("、")); break;
+    case "registered": { const s = spk(e.speaker_id, e.name); s.registered = true; note("已登记 " + e.name + " 的声纹"); break; }
+    case "need_more_speech": note(`${e.name} 说的话还不够（${e.have_s} 秒 / 需要 ${e.need_s} 秒），请再多说几句`); break;
     case "profile_created": spk(e.speaker_id, e.name); break;
     case "profile_renamed": { const s = spk(e.speaker_id, e.name); s.aliases = e.aliases || []; note(`${e.old_name} → ${e.name}`); break; }
     case "speech_start": open[e.utterance_id] = { start: e.audio_t, id: null }; break;
@@ -187,6 +245,7 @@ function handle(e) {
     case "ai_turn_end": aiMsg = null; break;
     case "error": note("！" + e.message); break;
     case "closed": $("state").textContent = "已结束"; break;
+    case "tool_call": break;
   }
   render();
 }
@@ -195,12 +254,15 @@ function render() {
   const list = Object.values(speakers);
   $("speakers").innerHTML = list.length ? list.map((s) =>
     `<div class="card ${s.speaking ? "speaking" : ""}" style="--col:${s.color}">
-       <div class="n"><i></i>${esc(s.name)}</div>
+       <div class="n"><i></i>${esc(s.name)}${s.registered ? '<span class="reg">已登记</span>' : ""}</div>
        <small>${s.n} 句 · 共 ${s.talk.toFixed(1)} 秒</small>
+       ${canRegister(s) ? `<button data-register="${esc(s.id)}">登记声纹</button>` : ""}
        ${s.aliases.length ? `<span class="al">也可能被听成：${esc(s.aliases.join("、"))}</span>` : ""}
      </div>`).join("") : `<div class="empty">还没有人开口</div>`;
   drawLanes();
 }
+
+const canRegister = (s) => sessionState === "listening" && token && !s.registered && !s.id.startsWith("u");
 
 function drawLanes() {
   const t = now + (ws && ws.readyState === 1 || demoTimer ? (performance.now() - lastWall) / 1000 : 0);
@@ -216,7 +278,7 @@ function drawLanes() {
 setInterval(() => { if (Object.keys(open).length || demoTimer) drawLanes(); }, 200);
 
 function connect() {
-  ws = new WebSocket(WS_URL);
+  ws = new WebSocket(wsUrl());
   ws.onopen = () => { $("dot").classList.add("on"); $("state").textContent = "已连接，等待事件"; };
   ws.onmessage = (m) => handle(JSON.parse(m.data));
   ws.onclose = () => { $("dot").classList.remove("on"); if (!demoTimer) $("state").textContent = "未连接（每 2 秒重试）"; setTimeout(connect, 2000); };
@@ -306,7 +368,130 @@ $("vps").onclick = async (ev) => {
   } catch (e) { $("vperr").textContent = e.message; }
 };
 
-reset(); connect(); refreshAccount();
+// ---- 会话控制、设置、引导 ----
+let sessionState = "idle", hasKey = false;
+function banner(kind, html, ms = 0) {
+  const b = $("banner"); b.className = kind; b.innerHTML = html; b.hidden = !html;
+  document.documentElement.style.setProperty("--bh", html ? b.offsetHeight + 12 + "px" : "0px");
+  if (ms) setTimeout(() => { if (b.innerHTML === html) banner("", ""); }, ms);
+}
+function guide() {
+  if (!hasKey) banner("todo", `<b>第一步：</b>在设置里选好模型并填入密钥（现在选的是「${esc(providerById(info.provider).label || "")}」），才能让 AI 听和说。<span class="sp"></span><button id="gokey">去设置</button>`);
+  else if (sessionState === "idle" && !token) banner("todo", `密钥已设置。点<b>开始监听</b>就能用；想让它记住你们的声音，先点右上角<b>账号</b>注册并登录。`);
+  else if (sessionState === "listening" && !token) banner("todo", `正在监听。想让程序记住你们的声音，请先在<b>账号</b>里登录，再重新开始监听。`);
+  else banner("", "");
+  const g = $("gokey"); if (g) g.onclick = () => $("settings").click();
+}
+let info = { providers: [], settings: {}, provider: "gemini", tts_engines: [], tts_key: {}, emotions: [] };
+const providerById = (id) => info.providers.find((p) => p.id === id) || {};
+function fillSettings() {
+  const sel = $("prov");
+  sel.innerHTML = info.providers.map((p) => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join("");
+  sel.value = info.provider; $("curl").value = info.settings.custom_base_url || ""; $("cmodel").value = info.settings.custom_model || "";
+  $("zhvoice").value = info.settings.zh_voice || "";
+  $("ttsengine").innerHTML = info.tts_engines.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join("");
+  $("ttsengine").value = info.settings.tts_engine || "mac";
+  $("emotion").innerHTML = info.emotions.map((e) => `<option>${esc(e)}</option>`).join("");
+  const st = info.settings;
+  $("qvoice").value = st.qwen_voice || ""; $("cosyurl").value = st.cosyvoice_url || ""; $("cosymode").value = st.cosyvoice_mode || "instruct2";
+  $("cosyspk").value = st.cosyvoice_speaker || ""; $("cosyrate").value = st.cosyvoice_rate || "";
+  showProvider();
+}
+function showEngine() {
+  const e = $("ttsengine").value;
+  $("macfields").hidden = e !== "mac"; $("qwenfields").hidden = e !== "qwen"; $("cosyfields").hidden = e !== "cosyvoice";
+  $("dskeystatus").textContent = info.tts_key.has_key ? `已设置密钥（末尾 ${(info.tts_key.hint || "").slice(1)}）` : "还没有设置密钥";
+  $("auditionmsg").textContent = e === "mac" ? "本机声音只能通过语速、音高、音量表现情绪，想要更自然的情感请换引擎" : "";
+}
+function showProvider() {
+  const p = providerById($("prov").value);
+  $("provnote").textContent = p.note || "";
+  $("customfields").hidden = p.id !== "custom"; $("voicefields").hidden = p.kind !== "chat"; showEngine();
+  $("keystatus").textContent = p.has_key ? `已设置密钥（末尾 ${(p.hint || "").slice(1)}）` : "还没有设置密钥";
+  $("keyhelp").innerHTML = p.id === "gemini" ? '在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 申请。密钥只保存在这台电脑上，不会再显示出来。'
+    : p.id === "deepseek" ? '在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">DeepSeek 开放平台</a> 申请。密钥只保存在这台电脑上，不会再显示出来。'
+    : "在你使用的模型提供商的控制台申请。密钥只保存在这台电脑上，不会再显示出来。";
+}
+async function refreshState() {
+  try {
+    const s = await (await fetch("/api/state")).json();
+    if (s.api_version !== EXPECTED_API) {  // 页面是新的，后台还是旧版本：不要硬用缺失的字段
+      banner("err", `<b>页面已经更新，但后台还是旧版本。</b>请关闭 GivingEar 的终端窗口，重新双击 GivingEar.command。<span class="sp"></span>`);
+      $("startstop").disabled = true; $("settings").disabled = true; return;
+    }
+    $("settings").disabled = false;
+    wsPort = s.ws_port || wsPort; hasKey = s.has_key; sessionState = s.state;
+    const changed = JSON.stringify([s.providers, s.provider, s.settings, s.tts_key]) !== JSON.stringify([info.providers, info.provider, info.settings, info.tts_key]);
+    info = { providers: s.providers || [], settings: s.settings || {}, provider: s.provider, tts_engines: s.tts_engines || [], tts_key: s.tts_key || {}, emotions: s.emotions || [] };
+    if (changed && !$("setdlg").open) fillSettings(); else if ($("setdlg").open) showProvider();
+    const b = $("startstop"); b.disabled = s.state === "starting" || s.state === "unavailable";
+    b.textContent = s.state === "listening" ? "停止监听" : s.state === "starting" ? "启动中…" : "开始监听";
+    b.classList.toggle("stop", s.state === "listening");
+    if (!demoTimer) guide();
+    render();
+  } catch { /* 服务没开着 */ }
+}
+$("startstop").onclick = async () => {
+  try {
+    if (sessionState === "listening") await api("POST", "/api/session/stop", {});
+    else { banner("", ""); await api("POST", "/api/session/start", { aec: $("aec").checked }); }
+  } catch (e) { banner("err", esc(e.message)); }
+  refreshState();
+};
+$("settings").onclick = () => {
+  $("keyerr").textContent = ""; $("keyerr").className = "err";
+  try { fillSettings(); } catch (e) { keymsg("设置页加载出错：" + e.message); }  // 即使出错也要把弹窗打开，让人看到原因
+  if (!$("setdlg").open) $("setdlg").showModal();
+};
+$("prov").onchange = showProvider;
+$("ttsengine").onchange = showEngine;
+let auditionAudio = null;
+$("audition").onclick = async () => {
+  $("auditionmsg").textContent = "正在合成…"; $("auditionmsg").className = "hint";
+  try {
+    await saveAll();
+    const r = await api("POST", "/api/settings/test-voice", { emotion: $("emotion").value });
+    if (!r.ok) { $("auditionmsg").textContent = r.message; return; }
+    if (auditionAudio) auditionAudio.pause();
+    auditionAudio = new Audio("data:audio/wav;base64," + r.wav); await auditionAudio.play(); $("auditionmsg").textContent = "";
+  } catch (e) { $("auditionmsg").textContent = e.message; }
+};
+const keymsg = (text, ok) => { $("keyerr").textContent = text; $("keyerr").className = "err" + (ok ? " ok" : ""); };
+async function saveAll() {
+  const provider = $("prov").value;
+  await api("POST", "/api/settings/provider", {
+    provider, custom_base_url: $("curl").value, custom_model: $("cmodel").value, zh_voice: $("zhvoice").value || "Tingting",
+    tts_engine: $("ttsengine").value, qwen_voice: $("qvoice").value || "Cherry", cosyvoice_url: $("cosyurl").value, cosyvoice_mode: $("cosymode").value,
+    cosyvoice_speaker: $("cosyspk").value, cosyvoice_rate: $("cosyrate").value || "24000" });
+  if ($("keyin").value.trim()) await api("POST", "/api/settings/key", { provider, key: $("keyin").value });
+  if ($("dskey").value.trim()) await api("POST", "/api/settings/key", { provider: "dashscope", key: $("dskey").value });
+  $("keyin").value = ""; $("dskey").value = "";
+  await refreshState(); fillSettings(); $("prov").value = provider; showProvider();
+}
+$("savekey").onclick = async () => { try { await saveAll(); keymsg("已保存", true); banner("ok", "设置已保存", 3000); } catch (e) { keymsg(e.message); } };
+$("delkey").onclick = async () => {
+  try { await api("DELETE", "/api/settings/key?provider=" + encodeURIComponent($("prov").value)); await refreshState(); const v = $("prov").value; fillSettings(); $("prov").value = v; showProvider(); keymsg("已删除这个模型的密钥", true); }
+  catch (e) { keymsg(e.message); }
+};
+$("testconn").onclick = async () => {
+  keymsg("正在测试…", true);
+  try { await saveAll(); const r = await api("POST", "/api/settings/test", {}); keymsg(r.message, r.ok); } catch (e) { keymsg(e.message); }
+};
+$("speakers").onclick = async (ev) => {
+  const id = ev.target.dataset.register; if (!id) return;
+  const s = speakers[id]; let name = "";
+  if (/^说话人 \d+$/.test(s.name)) { name = prompt("这个人叫什么名字？") || ""; if (!name.trim()) return; }
+  try {
+    const r = await api("POST", "/api/session/register", { speaker_id: id, name });
+    if (r.ok) banner("ok", `已登记 ${esc(r.name)}，下次开始监听就能直接认出来`, 5000);
+    else if (r.need_more_speech) banner("err", `${esc(s.name)} 说的话还不够（${r.have_s} 秒 / 需要 ${r.need_s} 秒），请他再多说几句再试`, 6000);
+    else banner("err", esc(r.error || "登记失败"), 6000);
+  } catch (e) { banner("err", esc(e.message), 6000); }
+};
+document.querySelectorAll(".close").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
+setInterval(refreshState, 3000);
+
+reset(); refreshState().then(connect); refreshAccount();
 </script>
 </body>
 </html>

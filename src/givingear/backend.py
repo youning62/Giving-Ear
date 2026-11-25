@@ -39,6 +39,14 @@ class VoiceBackend(Protocol):
     async def send_audio(self, frame: AudioFrame) -> None: ...
     async def send_speaker_label(self, label: SpeakerLabel) -> None: ...
     async def send_tool_result(self, call_id: str, tool: str, result: dict[str, Any]) -> None: ...
+    async def send_transcript(self, speaker_id: str, name: str, text: str, t: float) -> None:
+        """一句话在本地转成了文字（带说话人）。原生语音模型自己会听，可以忽略；文字模型靠它。"""
+        ...
+
+    async def interrupt(self) -> None:
+        """有人开口了。原生语音模型自己会发现，可以忽略；文字模型要取消还没说的回复。"""
+        ...
+
     async def send_note(self, text: str) -> None:
         """插入一条给模型的背景说明（不是用户说的话，不应触发回复）。"""
         ...
@@ -57,6 +65,8 @@ class FakeBackend:
     labels: list[SpeakerLabel] = field(default_factory=list)
     tool_results: list[tuple[str, str, dict]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    transcripts: list[tuple[str, str, str]] = field(default_factory=list)
+    interrupts: int = 0
     _out: asyncio.Queue = field(default_factory=asyncio.Queue)
 
     async def connect(self) -> None:
@@ -73,6 +83,12 @@ class FakeBackend:
 
     async def send_note(self, text: str) -> None:
         self.notes.append(text)
+
+    async def send_transcript(self, speaker_id: str, name: str, text: str, t: float) -> None:
+        self.transcripts.append((speaker_id, name, text))
+
+    async def interrupt(self) -> None:
+        self.interrupts += 1
 
     def emit(self, e: BackendEvent) -> None:
         self._out.put_nowait(e)

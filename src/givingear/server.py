@@ -14,8 +14,11 @@ DEFAULT_PORT = 8765
 
 async def start_server(bus: EventBus, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> Server:
     async def handler(ws: ServerConnection) -> None:
+        past = list(bus.history)  # 晚到的网页先补上当前会话已发生的事；这一步和订阅之间没有 await，不会漏也不会重
         q = bus.subscribe()
         try:
+            for e in past:
+                await ws.send(json.dumps(e, ensure_ascii=False))
             while True:
                 e = await q.get()
                 await ws.send(json.dumps(e, ensure_ascii=False))
