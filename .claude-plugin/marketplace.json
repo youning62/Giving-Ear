@@ -1,0 +1,25 @@
+{
+  "name": "givingear",
+  "owner": {
+    "name": "Youning Zheng",
+    "url": "https://github.com/youning62"
+  },
+  "metadata": {
+    "description": "GivingEar: speaker identification and diarization for Claude, on-device."
+  },
+  "plugins": [
+    {
+      "name": "givingear",
+      "source": "./plugins/givingear",
+      "description": "Speaker identification for Claude: know who said what in a live room conversation, and transcribe recordings by speaker. On-device, Chinese + English, macOS.",
+      "version": "0.2.0",
+      "category": "productivity",
+      "keywords": [
+        "speaker-identification",
+        "speaker-diarization",
+        "voiceprint",
+        "meeting-transcription"
+      ]
+    }
+  ]
+}

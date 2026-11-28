@@ -7,7 +7,7 @@ import asyncio
 import sys
 import webbrowser
 
-from . import account_cli, webapi
+from . import account_cli, ear_cli, webapi
 from .accounts import AccountError, AccountStore
 from .audio import WavFileSource
 from .backend import FakeBackend
@@ -172,6 +172,8 @@ def main(argv: list[str] | None = None) -> None:
     web.add_argument("--web-port", type=int, default=WEB_PORT)
     web.add_argument("--port", type=int, default=DEFAULT_PORT, help="事件流端口")
     account_cli.add_parsers(sub)
+    ear_cli.add_parsers(sub)
+    sub.add_parser("mcp", help="作为 MCP 服务器运行（stdio），供 Claude Desktop / Claude Code 等调用")
     argv = sys.argv[1:] if argv is None else argv
     if not argv:  # 什么都不写：启动网页服务
         argv = ["web"]
@@ -190,6 +192,14 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.cmd in ("account", "speakers"):
         account_cli.run(args)
+        return
+    if args.cmd == "mcp":
+        from .mcp_server import main as mcp_main
+
+        mcp_main()
+        return
+    if args.cmd in ear_cli.EAR_COMMANDS:
+        ear_cli.run(args)
         return
     try:
         asyncio.run(_run(args))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import subprocess
 import tempfile
 import wave
@@ -32,18 +33,32 @@ class AudioSource(Protocol):
 
 
 def read_wav(path: str | Path) -> np.ndarray:
-    """读取任意 WAV，返回 16 kHz 单声道 float32。格式不对时用 macOS 自带的 afconvert 转换。"""
+    """读取音频文件，返回 16 kHz 单声道 float32。
+
+    16 kHz 单声道 16 位的 WAV 直接读；其他格式（其他采样率的 WAV、MP3、M4A……）用 macOS 自带的 afconvert
+    或 ffmpeg 转换到临时目录，用完即删。
+    """
     path = Path(path)
-    with wave.open(str(path)) as w:
-        ok = w.getframerate() == SAMPLE_RATE and w.getnchannels() == 1 and w.getsampwidth() == 2
-        if ok:
-            return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32768
-    # 转换结果只是输入文件的另一种格式，用完即删
+    if not path.exists():
+        raise FileNotFoundError(f"找不到文件：{path}")
+    try:
+        with wave.open(str(path)) as w:
+            if w.getframerate() == SAMPLE_RATE and w.getnchannels() == 1 and w.getsampwidth() == 2:
+                return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32768
+    except (wave.Error, EOFError):
+        pass  # 不是 WAV，交给转换工具
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "converted.wav"
-        subprocess.run(
-            ["afconvert", "-f", "WAVE", "-d", f"LEI16@{SAMPLE_RATE}", "-c", "1", str(path), str(out)], check=True
-        )
+        if shutil.which("afconvert"):
+            cmd = ["afconvert", "-f", "WAVE", "-d", f"LEI16@{SAMPLE_RATE}", "-c", "1", str(path), str(out)]
+        elif shutil.which("ffmpeg"):
+            cmd = ["ffmpeg", "-loglevel", "error", "-y", "-i", str(path), "-ac", "1", "-ar", str(SAMPLE_RATE),
+                   "-sample_fmt", "s16", str(out)]
+        else:
+            raise RuntimeError("这个文件不是 16 kHz 单声道 WAV，需要 ffmpeg 来转换格式，请先安装 ffmpeg")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0 or not out.exists():
+            raise RuntimeError(f"无法读取音频文件 {path.name}：{(result.stderr or result.stdout).strip()[:300]}")
         return read_wav(out)
 
 

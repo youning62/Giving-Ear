@@ -1,0 +1,33 @@
+{
+  "name": "givingear",
+  "version": "0.2.0",
+  "description": "Speaker identification for Claude: listen to an in-room conversation through your Mac's microphone and know who said what (voiceprints, Chinese + English, fully on-device). Also transcribes recordings by speaker. 说话人识别：让 Claude 知道房间里谁说了什么。",
+  "author": {
+    "name": "Youning Zheng",
+    "url": "https://github.com/youning62"
+  },
+  "homepage": "https://github.com/youning62/Giving-Ear",
+  "repository": "https://github.com/youning62/Giving-Ear",
+  "license": "Apache-2.0",
+  "keywords": [
+    "speaker-identification",
+    "speaker-diarization",
+    "voiceprint",
+    "meeting-transcription",
+    "who-said-what",
+    "transcription",
+    "macos",
+    "chinese",
+    "说话人识别",
+    "声纹"
+  ],
+  "mcpServers": {
+    "givingear": {
+      "command": "uvx",
+      "args": [
+        "givingear==0.2.0",
+        "mcp"
+      ]
+    }
+  }
+}

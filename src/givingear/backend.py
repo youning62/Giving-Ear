@@ -99,3 +99,26 @@ class FakeBackend:
 
     async def close(self) -> None:
         self.closed = True
+
+
+class NullBackend:
+    """不接任何 AI 模型：只当耳朵用（givingear listen / diarize），由调用方的 AI 助手充当大脑。"""
+
+    def __init__(self):
+        self._closed = asyncio.Event()
+
+    async def connect(self) -> None: ...
+    async def send_audio(self, frame: AudioFrame) -> None: ...
+    async def send_speaker_label(self, label: SpeakerLabel) -> None: ...
+    async def send_tool_result(self, call_id: str, tool: str, result: dict[str, Any]) -> None: ...
+    async def send_transcript(self, speaker_id: str, name: str, text: str, t: float) -> None: ...
+    async def interrupt(self) -> None: ...
+    async def send_note(self, text: str) -> None: ...
+
+    async def events(self) -> AsyncIterator[BackendEvent]:
+        await self._closed.wait()
+        return
+        yield  # 让它成为异步生成器
+
+    async def close(self) -> None:
+        self._closed.set()
